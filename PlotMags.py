@@ -30,8 +30,8 @@ def processData(filen):
 
 def findApSum(folder):
     ap_list=[]
-    for filename in os.listdir(args.folder):
-        f = os.path.join(args.folder, filename)
+    for filename in os.listdir(folder):
+        f = os.path.join(folder, filename)
         print(f)
         image = processData(f)
         image = image[0:1360, 0:2048].clip(min=0)

@@ -1,11 +1,16 @@
 import argparse
 
 import numpy as np
-from photutils import DAOStarFinder
 from photutils import aperture_photometry, CircularAperture
-from astropy.stats import mad_std
 from astropy.io import fits
 import matplotlib.pyplot as plt
+
+from photutils.detection import IRAFStarFinder
+from photutils.psf import IntegratedGaussianPRF, DAOGroup
+from photutils.background import MMMBackground, MADStdBackgroundRMS
+from astropy.modeling.fitting import LevMarLSQFitter
+from astropy.stats import gaussian_sigma_to_fwhm
+
 
 
 parser = argparse.ArgumentParser(description="find stars in image test",
@@ -31,10 +36,15 @@ def processData(filen):
     return finaldat
 
 def findStars(image):
+    sigma_psf = 30
     image = image[0:1360, 0:2048].clip(min=0)
-    bkg_sigma = mad_std(image)
-    daofind = DAOStarFinder(fwhm=30., threshold=100.*bkg_sigma)
-    sources = daofind(image)
+    bkgrms = MADStdBackgroundRMS()
+    std = bkgrms(image)
+    iraffind = IRAFStarFinder(threshold=35*std,
+                            fwhm=sigma_psf*gaussian_sigma_to_fwhm,
+                            minsep_fwhm=0.01, roundhi=5.0, roundlo=-5.0,
+                            sharplo=0.0, sharphi=2.0)
+    sources = iraffind(image)
     positions = np.transpose((sources['xcentroid'], sources['ycentroid']))
     apertures = CircularAperture(positions, r=15.)
     phot_table = aperture_photometry(image, apertures)
