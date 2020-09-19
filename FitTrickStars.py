@@ -1,8 +1,9 @@
 import argparse
 import os
-import matplotlib.pyplot as plt
 
+import matplotlib.pyplot as plt
 import numpy as np
+
 from photutils.detection import IRAFStarFinder
 from photutils import aperture_photometry, CircularAperture
 from astropy.stats import mad_std
@@ -82,12 +83,14 @@ def fitStars(x_line, y_line):
     gauss_list = [amplitude, fwhm]
     return gauss_list
 
-def plotStars(measurements):
-    for star in measurements:
-        plt.scatter(star[1], star[0])
+def plotStars(filename):
+    data = []
+    amp, fwhm = np.loadtxt(filename, delimiter=',', unpack=True)
+    plt.scatter(fwhm, amp)
     plt.show()
 
 def main():
+    datafile = "StarData.txt"
     measurements = []
     for filename in os.listdir(args.folder):
         gauss_list = []
@@ -96,8 +99,11 @@ def main():
         x, y = findStars(f)
         gauss_list = fitStars(x, y)
         measurements.append(gauss_list)
-    plotStars(measurements)
-    print(measurements)
+    f = open(datafile, "w+")
+    for star in measurements:
+        f.write(f"{str(star[0])}, {str(star[1])}\n")
+    f.close()
+    plotStars(datafile)
 
 if __name__ =='__main__':
     main()
