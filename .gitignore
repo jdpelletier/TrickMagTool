@@ -3,3 +3,5 @@
 *.fits
 *.gz
 StarData.txt
+findGCTimages.py
+fitScript.py

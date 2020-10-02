@@ -8,7 +8,8 @@ from photutils.detection import IRAFStarFinder
 from photutils import aperture_photometry, CircularAperture
 from astropy.stats import mad_std
 from astropy.io import fits
-from photutils.psf import IntegratedGaussianPRF, DAOGroup
+import astropy.units as u
+from photutils.psf import IntegratedGaussianPRF, DAOGroup, IterativelySubtractedPSFPhotometry
 from photutils.background import MMMBackground, MADStdBackgroundRMS
 from astropy.stats import gaussian_sigma_to_fwhm
 from astropy.modeling import models, fitting
@@ -36,30 +37,23 @@ def processData(filen):
 
 def findStars(f):
     image = processData(f)
-    sigma_psf = 30
+    sigma_psf = 20
     image = image[0:1360, 0:2048].clip(min=0)
     bkgrms = MADStdBackgroundRMS()
     std = bkgrms(image)
-    iraffind = IRAFStarFinder(threshold=35*std,
+    iraffind = IRAFStarFinder(threshold=20*std,
                             fwhm=sigma_psf*gaussian_sigma_to_fwhm,
                             minsep_fwhm=0.01, roundhi=5.0, roundlo=-5.0,
                             sharplo=0.0, sharphi=2.0)
-    daogroup = DAOGroup(2.0*sigma_psf*gaussian_sigma_to_fwhm)
-    mmm_bkg = MMMBackground()
-    fitter = fitting.LevMarLSQFitter()
-    psf_model = IntegratedGaussianPRF(sigma=sigma_psf)
-    from photutils.psf import IterativelySubtractedPSFPhotometry
-    photometry = IterativelySubtractedPSFPhotometry(finder=iraffind,
-                                                group_maker=daogroup,
-                                                bkg_estimator=mmm_bkg,
-                                                psf_model=psf_model,
-                                                fitter=fitting.LevMarLSQFitter(),
-                                                niters=1, fitshape=(11,11))
-    result_tab = photometry(image=image)
-    x = int(result_tab['x_fit'])
+    sources = iraffind(image)
+    positions = np.transpose((sources['xcentroid'], sources['ycentroid']))
+    apertures = CircularAperture(positions, r=15.)
+    phot_table = aperture_photometry(image, apertures)
+    brightest_source_id = phot_table['aperture_sum'].argmax()
+    x = int(phot_table[brightest_source_id]['xcenter']/u.pix)
     xmin = x-40
     xmax = x+40
-    y = int(result_tab['y_fit'])
+    y = int(phot_table[brightest_source_id]['ycenter']/u.pix)
     ymin = y-40
     ymax = y+40
     x_line = image[y, xmin:xmax]
@@ -72,19 +66,18 @@ def fitStars(x_line, y_line):
     fitter_gauss = fitting.LevMarLSQFitter()
     gx = fitter_gauss(model_gauss, x, x_line)
     gy = fitter_gauss(model_gauss, x, y_line)
-    # plt.scatter(x, x_line)
-    # plt.scatter(x, y_line)
-    # plt.plot(x, gx(x), label='GaussianX')
+    plt.scatter(x, x_line)
+    plt.scatter(x, y_line)
+    plt.plot(x, gx(x), label='GaussianX')
     gy = fitter_gauss(model_gauss, x, y_line)
-    # plt.plot(x, gy(x), label='GaussianY')
-    # plt.show()
+    plt.plot(x, gy(x), label='GaussianY')
+    plt.show()
     amplitude = (gx.amplitude.value+gy.amplitude.value)/2
     fwhm = ((gx.stddev.value+gy.stddev.value)/2)*0.118 #2.355*PixelScale
     gauss_list = [amplitude, fwhm]
     return gauss_list
 
 def plotStars(filename):
-    data = []
     amp, fwhm = np.loadtxt(filename, delimiter=',', unpack=True)
     plt.scatter(fwhm, amp)
     plt.show()
@@ -96,9 +89,14 @@ def main():
         gauss_list = []
         f = os.path.join(args.folder, filename)
         print(f)
-        x, y = findStars(f)
-        gauss_list = fitStars(x, y)
-        measurements.append(gauss_list)
+        try:
+            x, y = findStars(f)
+            gauss_list = fitStars(x, y)
+            measurements.append(gauss_list)
+        except TypeError:
+            print("Could not find star")
+        except ValueError:
+            print("Need to fix edges")
     f = open(datafile, "w+")
     for star in measurements:
         f.write(f"{str(star[0])}, {str(star[1])}\n")

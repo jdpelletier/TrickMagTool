@@ -6,10 +6,9 @@ from astropy.io import fits
 import matplotlib.pyplot as plt
 
 from photutils.detection import IRAFStarFinder
-from photutils.psf import IntegratedGaussianPRF, DAOGroup
-from photutils.background import MMMBackground, MADStdBackgroundRMS
-from astropy.modeling.fitting import LevMarLSQFitter
+from photutils.background import MADStdBackgroundRMS
 from astropy.stats import gaussian_sigma_to_fwhm
+import astropy.units as u
 
 
 
@@ -36,11 +35,11 @@ def processData(filen):
     return finaldat
 
 def findStars(image):
-    sigma_psf = 30
+    sigma_psf = 20
     image = image[0:1360, 0:2048].clip(min=0)
     bkgrms = MADStdBackgroundRMS()
     std = bkgrms(image)
-    iraffind = IRAFStarFinder(threshold=35*std,
+    iraffind = IRAFStarFinder(threshold=20*std,
                             fwhm=sigma_psf*gaussian_sigma_to_fwhm,
                             minsep_fwhm=0.01, roundhi=5.0, roundlo=-5.0,
                             sharplo=0.0, sharphi=2.0)
@@ -50,6 +49,8 @@ def findStars(image):
     phot_table = aperture_photometry(image, apertures)
     brightest_source_id = phot_table['aperture_sum'].argmax()
     print(phot_table[brightest_source_id]['aperture_sum'])
+    print(int(phot_table[brightest_source_id]['xcenter']/u.pix))
+    print(int(phot_table[brightest_source_id]['ycenter']/u.pix))
     plt.imshow(image, cmap='gray_r', origin='lower')
     apertures.plot(color='blue', lw=1.5, alpha=0.5)
     plt.show()
