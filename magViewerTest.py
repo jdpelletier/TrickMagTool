@@ -66,6 +66,8 @@ class FitsViewer(QtGui.QMainWindow):
         self.trickxsize = ktl.cache('ao', 'TRKRO1XS')
         self.trickysize = ktl.cache('ao', 'TRKRO1YS')
 
+        self.rawfile = ''
+
         self.threadpool = QtCore.QThreadPool()
 
         self.iqcalc = iqcalc.IQCalc(self.logger)
@@ -130,12 +132,14 @@ class FitsViewer(QtGui.QMainWindow):
         self.wcolor.currentIndexChanged.connect(self.color_change)
         wopen = QtGui.QPushButton("Open File")
         wopen.clicked.connect(self.open_file)
+        wsky = QtGui.QPushButton("Load Sky")
+        wsky.clicked.connect(self.load_sky)
         wquit = QtGui.QPushButton("Quit")
         wquit.clicked.connect(self.quit)
         fi.set_callback('cursor-changed', self.motion_cb)
         fi.add_callback('cursor-down', self.btndown)
         hbox2.addStretch(1)
-        for w in (self.wstartscan, self.wstopscan, self.wcut, self.wcolor, wopen, wquit):
+        for w in (self.wstartscan, self.wstopscan, self.wcut, self.wcolor, wopen, wsky, wquit):
             hbox2.addWidget(w, stretch=0)
 
         hw2 = QtGui.QWidget()
@@ -170,7 +174,7 @@ class FitsViewer(QtGui.QMainWindow):
         self.cachedFiles = self.walkDirectory()
         print("scan started...")
         scanner = Scanner(self.scan)
-        scanner.signals.load.connect(self.load_file)
+        scanner.signals.load.connect(self.processData)
         self.threadpool.start(scanner)
 
     def stop_scan(self):
@@ -180,7 +184,6 @@ class FitsViewer(QtGui.QMainWindow):
         print('Scanning stopped.')
 
     def load_file(self, filepath):
-        filepath = self.processData(filepath)
         image = load_data(filepath, logger=self.logger)
         self.fitsimage.set_image(image)
         # self.setWindowTitle(filepath)
@@ -215,7 +218,30 @@ class FitsViewer(QtGui.QMainWindow):
         else:
             fileName = str(res)
         if len(fileName) != 0:
-            self.load_file(fileName)
+            self.processData(fileName)
+
+    def load_sky(self):
+        res = QtGui.QFileDialog.getOpenFileName(self, "Open Sky file",
+                                                str(self.nightpath()))
+        if isinstance(res, tuple):
+            fileName = res[0]
+        else:
+            fileName = str(res)
+        if len(fileName) != 0:
+            self.subtract_sky(fileName)
+
+    def subtract_sky(self, filename):
+        skyheader, skyfitsData, skyfilter = self.addWcs(filename)
+        header, fitsData, filter = self.addWcs(self.rawfile)
+        # if filter == 'H':
+        #     oldbackground = fits.getdata('/kroot/rel/ao/qfix/data/Trick/H_sky.fits')
+        # else:
+        #     oldbackground = fits.getdata('/kroot/rel/ao/qfix/data/Trick/ks_sky.fits')
+        # no_sky = fitsData + oldbackground
+        with_sky = fitsData - skyfitsData
+        mask = fits.getdata('BadPix_1014Hz.fits', ext=0)
+        self.load_file(self.writeFits(header, np.multiply(with_sky, mask)))
+
 
     def cut_change(self):
         self.fitsimage.set_autocut_params(self.wcut.currentText())
@@ -344,14 +370,15 @@ class FitsViewer(QtGui.QMainWindow):
         return nightly
 
     def processData(self, filename):
+        self.rawfile = filename
         header, fitsData, filter = self.addWcs(filename)
         mask = fits.getdata('BadPix_1014Hz.fits', ext=0)
-        maskedData = np.multiply(fitsData, mask)
         if filter == 'H':
             background = fits.getdata('/kroot/rel/ao/qfix/data/Trick/H_sky.fits')
         else:
             background = fits.getdata('/kroot/rel/ao/qfix/data/Trick/ks_sky.fits')
-        return self.writeFits(header, maskedData - background)
+        subtracted_data = fitsData-background
+        self.load_file(self.writeFits(header, np.multiply(subtracted_data, mask)))
 
     def addWcs(self, filen):
         w = wcs.WCS(naxis=2)
