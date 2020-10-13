@@ -31,6 +31,9 @@ class FitsViewer(QtGui.QMainWindow):
 
         self.rawfile = ''
         self.filelist = []
+        self.fnumber = 0
+        self.amplitude = 0
+        self.fwhm = 0
 
         self.iqcalc = iqcalc.IQCalc(self.logger)
 
@@ -78,14 +81,12 @@ class FitsViewer(QtGui.QMainWindow):
 
         hbox2 = QtGui.QHBoxLayout()
         hbox2.setContentsMargins(QtCore.QMargins(4, 2, 4, 2))
-        self.wcut = QtGui.QComboBox()
-        for name in fi.get_autocut_methods():
-            self.wcut.addItem(name)
-        self.wcut.currentIndexChanged.connect(self.cut_change)
-        self.wcolor = QtGui.QComboBox()
-        for name in fi.get_color_algorithms():
-            self.wcolor.addItem(name)
-        self.wcolor.currentIndexChanged.connect(self.color_change)
+        self.wnext = QtGui.QPushButton("Next image")
+        self.wnext.clicked.connect(self.next_image)
+        self.wnext.setEnabled(False)
+        self.wmark = QtGui.QPushButton("Mark Star")
+        self.wmark.clicked.connect(self.mark_star)
+        self.wmark.setEnabled(False)
         wopend = QtGui.QPushButton("Open Directory")
         wopend.clicked.connect(self.open_directory)
         wopenf = QtGui.QPushButton("Open File")
@@ -97,7 +98,7 @@ class FitsViewer(QtGui.QMainWindow):
         fi.set_callback('cursor-changed', self.motion_cb)
         fi.add_callback('cursor-down', self.btndown)
         hbox2.addStretch(1)
-        for w in (self.wcut, self.wcolor, wopend, wopenf, wsky, wquit):
+        for w in (self.wmark, self.wnext, wopend, wopenf, wsky, wquit):
             hbox2.addWidget(w, stretch=0)
 
         hw2 = QtGui.QWidget()
@@ -132,6 +133,26 @@ class FitsViewer(QtGui.QMainWindow):
         self.filelist = self.read_folder(QtGui.QFileDialog.getExistingDirectory(
                                                 self, "Open FITS folder", '.'))
         self.open_image(self.filelist[0])
+        self.fnumber = 0
+        self.wnext.setEnabled(True)
+        self.wmark.setEnabled(True)
+
+
+    def next_image(self):
+        self.fnumber = self.fnumber + 1
+        try:
+            self.open_image(self.filelist[self.fnumber])
+            self.wmark.setEnabled(True)
+        except IndexError:
+            print("end of files")
+
+    def mark_star(self):
+        filename = "GalCenterData.txt"
+        text = f"{self.amplitude:.2f} {self.fwhm:.2f}"
+        f = open(filename, "a")
+        f.write(text)
+        f.close()
+        self.wmark.setEnabled(False)
 
     def open_file(self):
         res = QtGui.QFileDialog.getOpenFileName(self, "Open FITS file",
@@ -218,9 +239,9 @@ class FitsViewer(QtGui.QMainWindow):
         header, fitsData, filter = self.addWcs(filename)
         mask = fits.getdata('BadPix_1014Hz.fits', ext=0)
         if filter == 'H':
-            background = fits.getdata('H_sky.fits')
+            background = fits.getdata('/kroot/rel/ao/qfix/data/Trick/H_sky.fits')
         else:
-            background = fits.getdata('ks_sky.fits')
+            background = fits.getdata('/kroot/rel/ao/qfix/data/Trick/ks_sky.fits')
         subtracted_data = fitsData-background
         self.load_file(self.writeFits(header, np.multiply(subtracted_data, mask)))
 
@@ -323,8 +344,8 @@ class FitsViewer(QtGui.QMainWindow):
             # x_line = data[40-yc, 0:40] doesn't work well for some reason
             y_line = data[0:60, xc]
             # amplitude, fwhm = self.fitstars(x_line, y_line)
-            amplitude, fwhm = self.fitstars(y_line)
-            text = f"Amplitude: {amplitude:.2f} FWHM: {fwhm:.2f}"
+            self.amplitude, self.fwhm = self.fitstars(y_line)
+            text = f"Amplitude: {self.amplitude:.2f} FWHM: {self.fwhm:.2f}"
             self.box_readout.setText(text)
         except IndexError:
             text = "Amplitude: N/A FWHM: N/A"
