@@ -29,6 +29,7 @@ class FitsViewer(QtGui.QMainWindow):
         super(FitsViewer, self).__init__()
         self.logger = logger
 
+        self.outputfile = ''
         self.rawfile = ''
         self.filelist = []
         self.fnumber = 0
@@ -75,6 +76,18 @@ class FitsViewer(QtGui.QMainWindow):
         hbox.addStretch(1)
         hbox.addWidget(self.box_readout, stretch = 0)
 
+        self.fileinput = QtGui.QLineEdit("")
+
+        hbox.addStretch(1)
+        hbox.addWidget(self.fileinput, stretch = 0)
+
+        self.setfile = QtGui.QPushButton("Set File")
+        self.setfile.clicked.connect(self.set_file)
+
+        hbox.addStretch(1)
+        hbox.addWidget(self.setfile, stretch = 0)
+
+
         hw = QtGui.QWidget()
         hw.setLayout(hbox)
         vbox.addWidget(hw, stretch=0)
@@ -119,6 +132,9 @@ class FitsViewer(QtGui.QMainWindow):
         CompCanvas = my_canvas.get_draw_class('compass')
         return RecCanvas, CompCanvas
 
+    def set_file(self):
+        self.outputfile = self.fileinput.text()
+
     def load_file(self, filepath):
         image = load_data(filepath, logger=self.logger)
         self.fitsimage.set_image(image)
@@ -147,11 +163,9 @@ class FitsViewer(QtGui.QMainWindow):
             print("end of files")
 
     def mark_star(self):
-        filename = "GalCenterData.txt"
-        text = f"{self.amplitude:.2f} {self.fwhm:.2f}"
-        f = open(filename, "a")
-        f.write(text)
-        f.close()
+        text = f"{self.amplitude:.2f} {self.fwhm:.2f}\n"
+        with open(self.outputfile, "a+") as f:
+            f.write(text)
         self.wmark.setEnabled(False)
 
     def open_file(self):
